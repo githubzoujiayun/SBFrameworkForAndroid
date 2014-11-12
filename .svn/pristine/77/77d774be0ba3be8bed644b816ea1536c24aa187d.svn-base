@@ -1,0 +1,43 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+
+    <TextView
+        android:id="@+id/tv_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="URL：" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tv_url"
+        android:layout_marginTop="20dp" >
+
+        <TextView
+            android:id="@+id/tv_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="返回结果：\n" />
+    </ScrollView>
+
+    <Button
+        android:id="@+id/btn_request"
+        android:layout_above="@+id/btn_clean_disk_cache"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="发起请求"
+        android:onClick="btn_send"
+         />
+
+     <Button
+         android:id="@+id/btn_clean_disk_cache"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:text="清空缓存"
+	 android:onClick="btn_clean"
+		/>
+</RelativeLayout>

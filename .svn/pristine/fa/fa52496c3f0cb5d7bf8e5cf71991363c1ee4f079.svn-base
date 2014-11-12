@@ -1,0 +1,124 @@
+package com.sb.framework.view;
+
+import java.util.List;
+
+import android.app.Activity;
+import android.content.Context;
+import android.util.SparseArray;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+
+/**
+ * 只适用于最简单的ListView：所有Item都一样，一个Item对应一个定义好的bean，类型就是T
+ * @author seven
+ *
+ * @param <T>
+ */
+public abstract  class SBSimpleAdapter<T> extends BaseAdapter{
+
+	//private int layoutId = 0;
+	private Activity context;
+	private List<T> list;
+	
+	/**
+	 * 获取item的布局id
+	 * @return
+	 */
+	protected abstract int getLayoutId();
+	
+	public Context context(){
+		return context;
+	}
+	
+	public SBSimpleAdapter(Activity context, List<T> list){
+		this.context = context;
+		this.list = list;
+		//this.layoutId = layoutId;
+	}
+	
+	public void notifyDataSetChanged(List<T> list){
+		this.list = list;
+		notifyDataSetChanged();
+	}
+	
+	@Override
+	public int getCount() {
+		return list == null ? 0 : list.size();
+	}
+
+	@Override
+	public T getItem(int arg0) {
+		return list == null ? null : list.get(arg0);
+	}
+
+	@Override
+	public long getItemId(int position) {
+		return position;
+	}
+
+	/**
+	 * 在convertView不为空的基础上，还得对类型做判断，有点多余是吧
+	 * @param convertView
+	 * @return
+	 */
+	public abstract boolean isConvertViewUseable(View convertView);
+	
+	/**
+	 * convertView也重用了，ViewHolder也设置了，这个函数的工作就是从holder中find到子控件并设置值
+	 * 
+	 *  TextView topView = (TextView) viewHolder.findViewByID(R.id.topView, convertView);
+	 *	topView.setText(bean.name);
+	 * 
+	 * @param holder
+	 * @param convertView
+	 * @param bean
+	 * @param position
+	 */
+	public abstract void fillHolder(ViewHolder holder, View convertView, T bean, int position);
+	
+	@Override
+	public View getView(int position, View convertView, ViewGroup parent) 
+	{
+		if (convertView == null || !isConvertViewUseable(convertView)) {
+			LayoutInflater inflater = LayoutInflater.from(context);
+			convertView = inflater.inflate(getLayoutId(), null);
+		}
+		ViewHolder viewHolder = ViewHolder.getViewHolder(convertView);
+		T t = list.get(position);
+		fillHolder(viewHolder, convertView, t, position);
+		return convertView;
+	}
+
+	
+	public static class ViewHolder {
+		
+		private SparseArray<View> viewHolder;
+		
+		public ViewHolder() {
+			viewHolder = new SparseArray<View>();
+		}
+		public View findViewByID(int id, View view) {
+			View holdedView = viewHolder.get(id);
+			if (holdedView == null) {
+				holdedView = view.findViewById(id);
+				viewHolder.put(id, holdedView);
+			}
+			return holdedView;
+		}
+		
+		public static ViewHolder getViewHolder(View view) {
+			Object viewTag = view.getTag();
+			if (viewTag != null && viewTag instanceof ViewHolder) {
+				return (ViewHolder) viewTag;
+			} else {
+				viewTag = new ViewHolder();
+				view.setTag(viewTag);
+				return (ViewHolder) viewTag;
+			}
+		}
+
+	}
+}
+

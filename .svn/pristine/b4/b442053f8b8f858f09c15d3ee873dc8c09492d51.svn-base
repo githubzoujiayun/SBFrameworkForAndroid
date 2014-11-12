@@ -1,0 +1,691 @@
+package com.sb.framework;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Collection;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Locale;
+
+import org.apache.http.conn.util.InetAddressUtils;
+
+import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningServiceInfo;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
+import android.content.res.Configuration;
+import android.os.Build;
+import android.os.Environment;
+import android.os.Vibrator;
+import android.telephony.TelephonyManager;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.WindowManager;
+
+/**
+ * 需要在application里调用
+ * SB.init(context);
+ * 
+ * 
+ * 
+ * @author seven
+ *
+ */
+public class SB {
+
+	public static Context context;
+	public static String spName = "default.conf";
+	public static void init(Context context){
+		SB.context = context;
+		SB.display.init(context);
+	}
+	public static void setSharedPrefernceFileName(String name){
+		SB.spName = name;
+	}
+	/** 设置SD卡上的工作目录  */
+	public static void setSDRoot(String path){
+		SB.path.SD_ROOT = path;
+		if(SB.path.SD_ROOT == null || SB.path.SD_ROOT.equals("")){
+			SB.path.SD_ROOT = Environment.getExternalStorageDirectory().getAbsolutePath() + "/sb/";
+		}
+		if(!SB.path.SD_ROOT.endsWith("/")){
+			SB.path.SD_ROOT += "/";
+		}
+		SB.fileop.createDirIfNotExist(SB.path.SD_ROOT);
+	}
+	/** 设置上下文环境上的工作目录, 已经在getFilesDir()下了  */
+	public static void setContextRoot(String path){
+		SB.path.CONTEXT_ROOT = path;
+		if(SB.path.CONTEXT_ROOT == null || SB.path.CONTEXT_ROOT.equals("")){
+			SB.path.CONTEXT_ROOT = context.getFilesDir().getAbsolutePath();
+		}
+		if(!SB.path.CONTEXT_ROOT.endsWith("/")){
+			SB.path.CONTEXT_ROOT += "/";
+		}
+		SB.fileop.createDirIfNotExist(SB.path.SD_ROOT);
+	}
+	//--------------
+	/**
+	 * 常用，难归类的函数
+	 * @author seven
+	 *
+	 */
+	public static class common{
+		
+		//---------------
+		public static boolean isEmpty(Collection<?> c) {
+			return (c == null || c.size() <= 0);
+		}
+
+		public static boolean isNotEmpty(Collection<?> c) {
+			return !(c == null || c.size() <= 0);
+		}
+		
+		public static boolean isNull(Object o) {
+	        return o == null;
+	    }
+
+	    public static boolean isNotNull(Object o) {
+	        return !isNull(o);
+	    }
+
+		public static <T> boolean isEmpty(T[] arr) {
+			return (arr == null || arr.length <= 0);
+		}
+
+		public static <T> boolean isNotEmpty(T[] arr) {
+			return !(arr == null || arr.length <= 0);
+		}
+
+		public static boolean isEmpty(String str) {
+			return (str == null || str.trim().equals(""));
+		}
+
+		public static boolean isNotEmpty(String str) {
+			return !(str == null || str.trim().equals(""));
+		} 
+		//------------------
+		/** 跳过null判断获取toString **/
+		public static String toString(Object obj) {
+			return obj == null ? "" : obj.toString();
+		}
+		//------------------
+		public static void debug(String msg){
+			System.out.println(msg);
+		}
+		//------------------
+		/**
+		 * 生成一串唯一的标识：其实就是System.currentTimeMillis()
+		 * 
+		 * @return
+		 */
+		public static String getTimeStamp() {
+			long mili = System.currentTimeMillis();
+			return mili + "";
+		}
+		//-----------------
+		public static int count(Collection<?> c){
+			return c == null ? 0 : c.size();
+		}
+		public static <T> int count(T[] arr){
+			return arr == null ? 0 : arr.length;
+		}
+		
+		public static void i_am_cold(){
+			Vibrator v = (Vibrator) SB.context.getSystemService(Context.VIBRATOR_SERVICE);
+			v.vibrate(100);
+		}
+		
+	}///~~~end common~~~
+	
+	/**
+	 * 日期相关操作
+	 */
+	public static class date{
+		
+		public static final String yyyy_MM_dd = "yyyy-MM-dd";
+		public static final String HH_mm_ss = "HH:mm:ss";
+		public static final String yyyy_MM_dd_HH_mm_ss = "yyyy-MM-dd HH:mm:ss";
+		
+		public static String toString(Date date, String format){
+			if(format == null || format.equals("")) format = yyyy_MM_dd;
+			SimpleDateFormat sdf = new SimpleDateFormat(format, Locale.getDefault());
+			return sdf.format(date);
+		}
+		public static Date toDate(String date, String format){
+			SimpleDateFormat sdf = new SimpleDateFormat(format, Locale.getDefault());
+			try {
+				return sdf.parse(date);
+			} catch (ParseException e) {
+				e.printStackTrace();
+				return null;
+			}
+		}
+	}///~~~end date~~~~
+	
+	/** 路径相关的操作，负责维护路径，获取路径，创建目录，维护固定文件 */
+	public static class path{
+		/** 以/结尾  */
+		public static String SD_ROOT = "";
+		/** 以/结尾  */
+		public static String CONTEXT_ROOT = "";
+		/** 获得工作目录下的指定路径，不能以/开头，例如aa/rr.txt，返回/storage/工作目录/aa/rr.txt */
+		public static String getPathInSD(String subPath){
+			if(subPath != null){
+				if(subPath.startsWith("/")){
+					return SD_ROOT + subPath.substring(1);
+				}else{
+					return SD_ROOT + subPath;
+				}
+			}
+			return SD_ROOT;
+		}
+		/** 获得工作目录下的指定路径，不能以/开头，例如aa/rr.txt，返回/storage/工作目录/aa/rr.txt */
+		public static File getFileInSD(String subPath){
+			return new File(getPathInSD(subPath));
+		}
+		
+		/** 获得工作目录下的指定路径，不能以/开头，例如aa/rr.txt */
+		public static String getPathInContext(String subPath){
+			if(subPath != null){
+				if(subPath.startsWith("/")){
+					return CONTEXT_ROOT + subPath.substring(1);
+				}else{
+					return CONTEXT_ROOT + subPath;
+				}
+			}
+			return CONTEXT_ROOT;
+		}
+		/** 获得工作目录下的指定路径，不能以/开头，例如aa/rr.txt */
+		public static File getFileInContext(String subPath){
+			return new File(getPathInContext(subPath));
+		}
+		
+		/** 获取后缀，获取全路径下的文件名。。。*/
+	}
+	
+	/** 目录的增删改查，文件的增删改查，获取文件大小，字符串化 */
+	public static class fileop{
+		/** 创建目录：全路径创建 */
+		public static void createDirIfNotExist(String path){
+			File dir = new File(path);
+			if(!dir.exists()){
+				boolean res = dir.mkdirs();
+				if(!res) SB.common.debug("创建目录失败：" + path);
+			}
+		}
+		
+		/** 创建文件：不需要先保证目录存在，目录不存在，也会创建 */
+		public static void createFileIfNotExist(String path){
+			File file = new File(path);
+			if(file.exists()) return;
+			int index = path.lastIndexOf("/");
+			String dir = path.substring(0, index);
+			createDirIfNotExist(dir);
+			try {
+				file.createNewFile();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		/**
+		 * 移动文件--相当于剪切操作
+		 * 如果目标目录不存在，会创建
+		 * @param absoluteFile
+		 * @param to
+		 * @return
+		 */
+		public static File moveFile(String from, String toDir) {
+
+			File f = new File(from);
+			File dirTo = new File(toDir);
+			if (!dirTo.exists()) {
+				dirTo.mkdirs();
+			}
+			if (f.renameTo(new File(dirTo, f.getName()))) {
+				return new File(dirTo, f.getName());
+			} else {
+				return null;
+			}
+		}
+		
+		
+		/**
+		 * 作者：seven本人
+		 * 时间：2013.8.2  04:01 天快亮了
+		 * 
+		 * 把asset目录下的文件拷贝到指定的目录
+		 * @param dbname： 文件名，放在asset目录下，所以不用写全路径，如address.db
+		 * @param path：     拷贝之后的db文件放在哪个目录下，/data/data/ccc.ddd.vv/files或者databases
+		 * @param overrideOldFile：是否覆盖已有db文件，true：覆盖，false：不覆盖
+		 */
+		public static boolean copyAssetDb(final Context context, final String dbname, final String path, boolean overrideOldFile) {
+			if(!overrideOldFile){
+				// 检查数据库是否已经拷贝过了.
+				File file = new File(path, dbname);
+				if (file.exists() && file.length() > 0) {
+					return true;
+				}
+			}
+			//===本来是想用下面两个变量跟踪子线程状态，但无奈必须用final，但final
+			//===的值又不能更改，所以就用个集合放起来
+			//===否则报错：The final local variable xxx cannot be assigned, 
+			//===since it is defined in an enclosing type
+			//final boolean res = false;
+			//final boolean threadFinished = false;
+			final boolean[] res = {false,false};  //res.0是子线程操作是否成功，res.1是子线程是否结束
+			AssetManager am = context.getAssets();
+			try {
+				InputStream is = am.open(dbname);
+				File file = new File(context.getFilesDir(), dbname);
+				FileOutputStream fos = new FileOutputStream(file);
+				byte[] buffer = new byte[1024];
+				int len = 0;
+				while ((len = is.read(buffer)) != -1) {
+					fos.write(buffer, 0, len);
+				}
+				fos.close();
+				is.close();
+				//ToastUtils.showToastInThread(SplashActivity.this, "拷贝数据库成功");
+				res[0] = true;
+				res[1] = true;
+			} catch (Exception e) {
+				e.printStackTrace();
+				//ToastUtils.showToastInThread(SplashActivity.this, "拷贝数据库失败");
+				res[0] = false;
+				res[1] = true;
+			}
+			res[1] = true;
+			return res[0];
+		}
+		
+		/**
+		 * 把文件从asset拷到sd卡
+		 * @param assetPath  如DocType.properties
+		 * @param sdPath     绝对路径
+		 ；例如“moveFromAssetToSD("DocType.properties", Environment.getExternalStorageDirectory().getAbsolutePath() + "/boc_fudeng/DocType.properties");
+		 */
+	    public static void moveFromAssetToSD(String assetPath, String sdPath) {
+	        try {
+	            File file = new File(sdPath);
+	            if (!file.exists()) {
+	                //File fileLog = new File(filePathLog);
+	                InputStream in = SB.context.getAssets().open(assetPath);
+	                file.createNewFile();
+	                inputstreamtofile(in, file);
+	                in.close();
+	            }
+	        } catch (Exception ex) {
+	            ex.printStackTrace();
+	        }
+
+	    }
+	    private static void inputstreamtofile(InputStream ins, File file) {
+	        try {
+	            OutputStream os = new FileOutputStream(file);
+	            int bytesRead = 0;
+	            byte[] buffer = new byte[8192];
+	            while ((bytesRead = ins.read(buffer, 0, 8192)) != -1) {
+	                os.write(buffer, 0, bytesRead);
+	            }
+	            os.close();
+	            ins.close();
+	        } catch (Exception ex) {
+	            ex.printStackTrace();
+	        }
+
+	    }
+		
+	}///~~~end fileop~~~
+	
+	/** 文件的读写  */
+	public static class file{
+		public static String getContent(String absolutePath){
+			return null;
+		}
+		
+		public static void putContent(String absolutePath, String content){
+			
+		}
+		
+		public static void appendContent(String absolutePath, String content){
+			
+		}
+		
+		public static String getContent(InputStream in){
+			return null;
+		}
+		
+		public static void putContent(OutputStream out){
+			
+		}
+	}
+	
+	
+	public static class phone{
+		/**
+		 * 获取设备唯一标识码
+		 * 
+		 * @param context
+		 * @return
+		 */
+		public static String getDeviceId(Context context) {
+			TelephonyManager tm = (TelephonyManager) context
+					.getSystemService(Context.TELEPHONY_SERVICE);
+			return tm.getDeviceId();
+		}
+		
+		/** 获取本机ip地址 */
+		public String getLocAddress() {
+
+			String ipaddress = "";
+
+			try {
+				Enumeration<NetworkInterface> en = NetworkInterface
+						.getNetworkInterfaces();
+				// 遍历所用的网络接口
+				while (en.hasMoreElements()) {
+					NetworkInterface networks = en.nextElement();
+					// 得到每一个网络接口绑定的所有ip
+					Enumeration<InetAddress> address = networks.getInetAddresses();
+					// 遍历每一个接口绑定的所有ip
+					while (address.hasMoreElements()) {
+						InetAddress ip = address.nextElement();
+						System.out.println("+++: " + ip.getHostAddress());
+						if (!ip.isLoopbackAddress()
+								&& InetAddressUtils.isIPv4Address(ip
+										.getHostAddress())
+								&& !ip.getHostAddress().equals("10.0.2.15")
+								//&& !ip.getHostAddress().startsWith("172.")///这什么ip地址？
+								//&& !ip.getHostAddress().equals("010.000.002.015")
+							)
+						{
+							ipaddress = ip.getHostAddress();
+						}
+					}
+				}
+				//ipaddress = "192.168.0.106";
+			} catch (SocketException e) {
+				//Log.e("", "获取本地ip地址失败");
+				e.printStackTrace();
+			}
+
+			System.out.println("本机IP:" + ipaddress);
+
+			return ipaddress;
+
+		}
+	}///~~~end phone~~~
+	
+	
+	public static class collection{
+		/**
+		 * 从ours中删掉traitors中出现的元素
+		 * 
+		 * @param <T>
+		 * @param ours
+		 * @param traitors
+		 * @return
+		 */
+		public static <T> List<T> killTraitors(List<T> ours, List<T> traitors) {
+			int len = ours.size();
+			for (int i = 0; i < len; i++) {
+				if (traitors.contains(ours.get(i))) {
+					ours.remove(i);
+				}
+			}
+			return ours;
+		}
+	}
+	
+	public static class display{
+		
+		public static int statusBarHeight = 0;
+		public static int screenWidth = 0;
+		public static int secreenHeight = 0;
+		
+		public static void init(Context context){
+			statusBarHeight = getStatusBarHeight(context);
+			screenWidth = getScreenWidth((WindowManager)context.getSystemService(Context.WINDOW_SERVICE));
+			secreenHeight = getScreenHeight((WindowManager)context.getSystemService(Context.WINDOW_SERVICE));
+		}
+		public static int getStatusBarHeight(){ return statusBarHeight; }
+		public static int getScreenWidth(){ return screenWidth; }
+		public static int getScreenHeight(){ return secreenHeight; }
+		
+		private static int getStatusBarHeight(Context context) {
+			int result = 0;
+			int resourceId = context.getResources().getIdentifier(
+					"status_bar_height", "dimen", "android");
+			if (resourceId > 0) {
+				result = context.getResources().getDimensionPixelSize(resourceId);
+			}
+			return result;
+		}
+		
+		private static int getScreenHeight(WindowManager manager) {
+			DisplayMetrics metrics = new DisplayMetrics();
+			manager.getDefaultDisplay().getMetrics(metrics);
+			return metrics.heightPixels;
+		}
+
+		private static int getScreenWidth(WindowManager manager) {
+			DisplayMetrics metrics = new DisplayMetrics();
+			manager.getDefaultDisplay().getMetrics(metrics);
+			return metrics.widthPixels;
+		}
+		
+		///--------------------
+		/**
+		 * 根据手机分辨率从dp转成px
+		 * @param context
+		 * @param dpValue
+		 * @return
+		 */
+		public static  int dip2px(Context context, float dpValue) {  
+	        final float scale = context.getResources().getDisplayMetrics().density;  
+	        return (int) (dpValue * scale + 0.5f);  
+	    }  
+		  
+	    /** 
+	     * 根据手机的分辨率从 px(像素) 的单位 转成为 dp 
+	     */  
+		public static  int px2dip(Context context, float pxValue) {  
+	        final float scale = context.getResources().getDisplayMetrics().density;  
+	        return (int) (pxValue / scale + 0.5f)-15;  
+	    }  
+		
+		/**
+		 * 根据手机的屏幕属性从 sp的单位 转成为px(像素)
+		 * 
+		 * @param context
+		 * @param value
+		 * @return
+		 */
+		public static float sp2px(Context context, float value) {
+			DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+			return value * metrics.scaledDensity;
+		}
+
+		/**
+		 * 根据手机的屏幕属性从 px(像素) 的单位 转成为 sp
+		 * 
+		 * @param context
+		 * @param value
+		 * @return
+		 */
+		public static float px2sp(Context context, float value) {
+			DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+			return value / metrics.scaledDensity;
+		}
+		
+		//========================OrientationHelper================//
+		public static final int LANDSCAPE = Configuration.ORIENTATION_LANDSCAPE;
+		public static final int PORTRAIT = Configuration.ORIENTATION_PORTRAIT;
+		public static final int NOTHING = -100;
+
+		public static Integer userTending(int orientation, int previous) {
+
+			if (previous == PORTRAIT) {
+				if (orientation > 85 && orientation < 115) {
+					return LANDSCAPE;
+				} else if (orientation > 285 && orientation < 300) {
+					return LANDSCAPE;
+				} else if(orientation > 160 && orientation < 210){
+					return LANDSCAPE;
+				}
+			} else if (previous == LANDSCAPE) {
+				if (orientation > 0 && orientation < 30) {
+					return PORTRAIT;
+				} else if (orientation > 330 && orientation < 360) {
+					return PORTRAIT;
+				}
+			}
+			return NOTHING;
+		}
+		
+		
+	}///~~~end display~~~///
+	
+	public static class activity{
+		
+		//----------------启动Activity----
+		public static void startActivity(Context context, Class<?> clazz, Object...params) {
+			Intent intent = new Intent(context, clazz);
+			if(params != null) buildIntent(intent, params);
+			context.startActivity(intent);
+		}
+		public static void startActivityWithNewTask(Context context, Class<?> clazz, String...params){
+			Intent intent = new Intent(context, clazz);
+			if(params != null) buildIntent(intent, params);
+			intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+			context.startActivity(intent);
+		}
+		public static void startActivityForResult(Activity context, Class<?> clazz, int requestCode, String...params){
+			Intent intent = new Intent(context, clazz);
+			if(params != null) buildIntent(intent, params);
+			context.startActivityForResult(intent, requestCode);
+		}
+		private static void buildIntent(Intent intent, Object...params){
+			for(int i = 0; i < params.length; i+=2){
+				String name = params[i].toString();
+				Object value = params[i+1];
+				//intent.putExtra(name, value);
+				Class<?> c = value.getClass();
+				try {
+					Method m = Intent.class.getMethod("putExtra", String.class, c);
+					m.invoke(intent, name, value);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		
+	}///~~~end activity~~~///
+	
+	public static class service{
+		
+		/**
+		 * 判断Service是否在运行
+		 * @param context
+		 * @param cls
+		 * @return
+		 */
+		public static boolean isServiceRunning(Context context, Class<?> cls){
+			ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+			List<RunningServiceInfo> infos = am.getRunningServices(100);
+			for(RunningServiceInfo info: infos){
+				String service = info.service.getClassName();
+				if(service.equals(cls.getName())){
+					return true;
+				}
+			}
+			return false;
+		}
+		
+	}///~~~end service~~~///
+	
+	
+	
+	/**
+	 * Class containing some static utility methods.
+	 */
+	public static class version {
+
+		// @TargetApi(11)
+		// public static void enableStrictMode() {
+		// if (VersionUtils.hasGingerbread()) {
+		// StrictMode.ThreadPolicy.Builder threadPolicyBuilder =
+		// new StrictMode.ThreadPolicy.Builder()
+		// .detectAll()
+		// .penaltyLog();
+		// StrictMode.VmPolicy.Builder vmPolicyBuilder =
+		// new StrictMode.VmPolicy.Builder()
+		// .detectAll()
+		// .penaltyLog();
+		//
+		// if (VersionUtils.hasHoneycomb()) {
+		// threadPolicyBuilder.penaltyFlashScreen();
+		// vmPolicyBuilder
+		// .setClassInstanceLimit(ImageGridActivity.class, 1)
+		// .setClassInstanceLimit(ImageDetailActivity.class, 1);
+		// }
+		// StrictMode.setThreadPolicy(threadPolicyBuilder.build());
+		// StrictMode.setVmPolicy(vmPolicyBuilder.build());
+		// }
+		// }
+
+		public static boolean hasFroyo() {
+			// Can use static final constants like FROYO, declared in later versions
+			// of the OS since they are inlined at compile time. This is guaranteed
+			// behavior.
+			return Build.VERSION.SDK_INT >= Build.VERSION_CODES.FROYO;
+		}
+
+		public static boolean hasGingerbread() {
+			return Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD;
+		}
+
+		public static boolean hasHoneycomb() {
+			return Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB;
+		}
+
+		public static boolean hasHoneycombMR1() {
+			return Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB_MR1;
+		}
+
+		public static boolean hasJellyBean() {
+			return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN;
+		}
+
+		public static String getAppVersionName(Context context) {
+			String versionName = "";
+			try {
+				PackageManager pm = context.getPackageManager();
+				PackageInfo pi = pm.getPackageInfo(context.getPackageName(), 0);
+				versionName = pi.versionName;
+				if (versionName == null || versionName.length() <= 0) {
+					return "";
+				}
+			} catch (Exception e) {
+				Log.e("VersionInfo", "Exception", e);
+			}
+			return versionName;
+		}
+	}
+}

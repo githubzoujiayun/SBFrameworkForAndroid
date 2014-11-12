@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">SBFrameworkForAndroid</string>
+    <string name="menu_settings">Settings</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="title_activity_text_view">TextViewActivity</string>
+    <string name="title_activity_image_view">ImageViewActivity</string>
+    <string name="title_activity_rubbish_oom">RubbishOOMActivity</string>
+    <string name="title_activity_adapter_view">AdapterViewActivity</string>
+    <string name="title_activity_http_test_urlconnection">HttpTestURLConnectionActivity</string>
+
+</resources>
